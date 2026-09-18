@@ -1,0 +1,24 @@
+# Build override: compile the server from source instead of pulling the published image.
+#
+# Layered on top of the default service, so the command/healthcheck/ports stay identical
+# and only the image source changes:
+#
+#   docker compose -f docker-compose.yml -f docker-compose.build.yml up -d --build
+#
+# The serving image is built on the PrismML fork, which is not published as a separate
+# image (its layers ship inside the serving image). So the base must exist locally first:
+#
+#   make base        # or: docker build -f base/Dockerfile -t prismml-llama-server:cuda13 base/
+#
+# Use this if you want to build against your own GPU architecture (CUDA_ARCHS) or an older
+# CUDA toolkit, or you simply prefer to compile what you run.
+
+services:
+  orcabonsai:
+    image: ${LOCAL_IMAGE:-orcabonsai-27b-serving:local}
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        BASE_IMAGE: ${BASE_IMAGE:-prismml-llama-server:cuda13}
+        ORCABONSAI_REF: ${ORCABONSAI_REF:-main}

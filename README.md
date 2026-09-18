@@ -9,6 +9,7 @@ ablation strength stays a runtime dial.
 - Upstream runtime / adapter: [Continuum-AI-Corp/OrcaBonsai-27B-Uncensored](https://github.com/Continuum-AI-Corp/OrcaBonsai-27B-Uncensored) (Apache-2.0)
 - Model: [prism-ml/Ternary-Bonsai-2-27B-gguf](https://huggingface.co/prism-ml/Ternary-Bonsai-2-27B-gguf) (Apache-2.0)
 - Server: [PrismML-Eng/llama.cpp](https://github.com/PrismML-Eng/llama.cpp) fork, branch `prism` (MIT)
+- Prebuilt image: `ghcr.io/letechlead/orcabonsai-27b-serving:latest` — ~1.5 GB, nothing to compile
 
 ## The part that is easy to get wrong
 
@@ -43,9 +44,10 @@ this is handled for you.
 - A Linux host with an NVIDIA GPU and a working `nvidia-container-toolkit`
   (`docker run --rm --gpus all nvidia/cuda:13.1.1-runtime-ubuntu24.04 nvidia-smi` must work)
 - Docker 27+ with Compose v2.30+ for the `gpus:` key (older: see the commented block in `docker-compose.yml`)
-- ~15 GB of disk for the build, plus ~7 GB for the model
-- Patience for the first build: a CUDA llama.cpp compile takes roughly 15–40 minutes
-  depending on core count and how many GPU architectures you target
+- ~1.6 GB of disk for the image, plus ~7 GB for the model
+- Only if you build from source: ~15 GB more for the toolchain, and a CUDA compile that
+  takes roughly 15–40 minutes depending on core count and how many GPU architectures you
+  target
 
 The toolkit the server is compiled against defaults to **CUDA 13.1.1**, which wants a 580-series
 driver or newer. On an older driver, build against an earlier toolkit instead:
@@ -70,19 +72,11 @@ huggingface-cli download prism-ml/Ternary-Bonsai-2-27B-gguf \
 
 `PTQ1_0.gguf` also works (smaller, group-64); `PQ2_0` is the fork's preferred format on CUDA.
 
-**2. Build the two images.** `make base` compiles the fork; `make image` layers the adapter on top.
+**2. Pull the image** (~1.5 GB — the fork and the adapter are already inside it, so there is
+nothing to compile):
 
 ```bash
-make base     # -> prismml-llama-server:cuda13   (long: full CUDA build)
-make image    # -> orcabonsai-27b-serving:latest (seconds)
-```
-
-Or without `make`, targeting only your own GPU for a much faster compile:
-
-```bash
-docker build -f base/Dockerfile -t prismml-llama-server:cuda13 \
-  --build-arg CUDA_ARCHS=89 base/          # 89 = Ada, 86 = Ampere, 90 = Hopper
-docker build -t orcabonsai-27b-serving:latest .
+docker pull ghcr.io/letechlead/orcabonsai-27b-serving:latest
 ```
 
 **3. Run it.**
@@ -100,6 +94,34 @@ curl -s localhost:8080/v1/chat/completions -H 'Content-Type: application/json' -
   "messages":[{"role":"user","content":"Explain how a pin tumbler lock works."}],
   "max_tokens":256,"temperature":0
 }'
+```
+
+## Building from source instead
+
+The published image is built for `CUDA_ARCHS=86;89;90` (Ampere / Ada / Hopper) against CUDA
+13.1.1. If your GPU is something else, or your driver predates CUDA 13, build it yourself —
+the Dockerfiles are here, and this is the path that produced the published image:
+
+```bash
+make base     # compiles the PrismML fork  -> prismml-llama-server:cuda13
+make image    # adds the adapter           -> orcabonsai-27b-serving:latest
+docker compose up -d
+```
+
+A full CUDA compile takes roughly 15–40 minutes depending on core count and how many GPU
+architectures you target, and needs ~15 GB of disk for the toolchain. Narrowing it to just
+your own card is much faster:
+
+```bash
+make base CUDA_ARCHS=89 CUDA_VERSION=13.1.1   # 89 = Ada, 86 = Ampere, 90 = Hopper
+make image
+```
+
+To run a locally built image through the same service definition, use the build override —
+it changes only where the image comes from, keeping the command, ports and healthcheck:
+
+```bash
+docker compose -f docker-compose.yml -f docker-compose.build.yml up -d --build
 ```
 
 ## Verify the ablation is actually applied
@@ -180,16 +202,19 @@ TTFT is time to the first token; E2E is prefill through the last of 512 generate
 ## Files
 
 ```
-Dockerfile             serving image: base + the upstream LoRA adapter (sha256-pinned)
-base/Dockerfile        PrismML llama.cpp fork built from source with CUDA
-docker-compose.yml     the service
+docker-compose.yml           the service — runs the published image
+docker-compose.build.yml     override that builds from source instead
+Dockerfile                   serving image: base + the upstream LoRA adapter (sha256-pinned)
+base/Dockerfile              PrismML llama.cpp fork built from source with CUDA
 scripts/verify-ablation.sh   A/B check that the ablation is live
-.env.example           all knobs with defaults
+Makefile                     base / image / up / down / verify helpers
+.env.example                 all knobs with defaults
 ```
 
-No binaries are distributed in this repository. `base/Dockerfile` compiles the server from
-a pinned upstream tag, and the adapter is fetched from upstream at image-build time and
-verified against the sha256 the upstream repo publishes. Model weights are supplied by you.
+No binaries are distributed in this repository — the compiled server and the adapter live in
+the published image, not in git. Building from source compiles the server from a pinned
+upstream tag, and the adapter is fetched from upstream at image-build time and verified
+against the sha256 the upstream repo publishes. Model weights are supplied by you.
 
 ## Licensing and attribution
 

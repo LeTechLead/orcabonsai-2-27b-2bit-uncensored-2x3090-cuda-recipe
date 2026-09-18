@@ -1,23 +1,21 @@
-# OrcaBonsai Ternary Bonsai 2 27B Uncensored — OpenAI-compatible server with the
-# runtime refusal-direction ablation applied.
+# OrcaBonsai Ternary Bonsai 2 27B Uncensored — OpenAI-compatible server with the runtime
+# refusal-direction ablation applied.
 #
-# The model weights are NOT part of this image. Put the GGUF in ./models (default)
-# or point MODEL_DIR at wherever it lives.
+# Runs the PUBLISHED IMAGE, so there is nothing to build:
 #
-# Build the images first (see README, or `make`):
-#   docker build -f base/Dockerfile -t prismml-llama-server:cuda13 base/
-#   docker build -t orcabonsai-27b-serving:latest .
-# then:
 #   docker compose up -d
+#
+# The image is a PrismML llama.cpp fork (the only runtime with the ternary PQ2_0 kernels)
+# with the upstream rank-1 LoRA adapter baked in. Its Dockerfiles are in this repository —
+# see the "Building from source instead" section of the README if you would rather compile
+# it yourself, or you are on a GPU architecture the published image was not built for.
+#
+# The model weights are NOT in the image. Put the GGUF in ./models (default) or point
+# MODEL_DIR at wherever it lives.
 
 services:
   orcabonsai:
-    build:
-      context: .
-      args:
-        BASE_IMAGE: ${BASE_IMAGE:-prismml-llama-server:cuda13}
-        ORCABONSAI_REF: ${ORCABONSAI_REF:-main}
-    image: ${SERVICE_IMAGE:-orcabonsai-27b-serving:latest}
+    image: ${SERVICE_IMAGE:-ghcr.io/letechlead/orcabonsai-27b-serving:latest}
     container_name: orcabonsai-27b
     # Requires Docker 27+ / Compose v2.30+. On older setups, comment this out and use
     # the deploy.resources block at the bottom of this service instead.

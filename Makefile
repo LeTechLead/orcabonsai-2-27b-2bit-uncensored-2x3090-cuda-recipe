@@ -1,8 +1,10 @@
-# Convenience wrapper. Both targets are plain docker build commands — read the
-# README if you prefer to run them by hand, or want to narrow CUDA_ARCHS.
+# Convenience wrapper. `make up` runs the published image (nothing to build);
+# `make base && make image` compiles from source instead. Both are plain docker
+# commands — read the README if you prefer to run them by hand.
 
+PUBLISHED_IMAGE ?= ghcr.io/letechlead/orcabonsai-27b-serving:latest
 BASE_IMAGE      ?= prismml-llama-server:cuda13
-SERVICE_IMAGE   ?= orcabonsai-27b-serving:latest
+LOCAL_IMAGE     ?= orcabonsai-27b-serving:local
 # CUDA toolkit the server is compiled against. It must be a version your NVIDIA driver
 # supports: CUDA 13.x needs a 580-series driver or newer. On an older driver use
 # 12.8.0 (needs 570+) or 12.4.0 (needs 550+).
@@ -11,7 +13,11 @@ CUDA_VERSION    ?= 13.1.1
 # Single arch builds much faster; add 75 (Turing), 80 (A100), 100/120 (Blackwell) as needed.
 CUDA_ARCHS      ?= 86;89;90
 
-.PHONY: base image up down logs verify clean
+.PHONY: pull base image up up-build down logs verify clean
+
+## Fetch the published image (the default path; nothing is compiled).
+pull:
+	docker pull $(PUBLISHED_IMAGE)
 
 ## Compile the PrismML llama.cpp fork from source (slow, run once).
 base:
@@ -21,10 +27,14 @@ base:
 
 ## Layer the upstream LoRA adapter onto the base image (fast).
 image:
-	docker build -t $(SERVICE_IMAGE) .
+	docker build -t $(LOCAL_IMAGE) .
 
 up:
 	docker compose up -d
+
+## Build from source and run that, instead of the published image.
+up-build: base image
+	docker compose -f docker-compose.yml -f docker-compose.build.yml up -d --build
 
 down:
 	docker compose down
@@ -36,6 +46,6 @@ logs:
 verify:
 	./scripts/verify-ablation.sh
 
-## Remove the images built here.
+## Remove the images built locally (leaves the published image alone).
 clean:
-	-docker rmi $(SERVICE_IMAGE) $(BASE_IMAGE)
+	-docker rmi $(LOCAL_IMAGE) $(BASE_IMAGE)
