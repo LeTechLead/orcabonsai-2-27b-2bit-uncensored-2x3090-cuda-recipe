@@ -1,0 +1,30 @@
+OrcaBonsai Ternary Bonsai 2 27B Uncensored — GPU serving recipe
+Copyright (c) LeTechLead
+
+This repository is packaging: Dockerfiles, a Compose service and scripts. It bundles
+no third-party binaries and no model weights.
+
+It depends on the following upstream work, which is not modified or redistributed here:
+
+  OrcaRouter research team — OrcaBonsai-27B-Uncensored
+    Runtime refusal-direction ablation, the refusal direction, the rank-1 LoRA adapter,
+    and the original CPU/MLX docker/Dockerfile.
+    https://github.com/Continuum-AI-Corp/OrcaBonsai-27B-Uncensored
+    License: Apache-2.0
+
+  PrismML — PrismML-Eng/llama.cpp (branch `prism`) and the Ternary Bonsai 2 model
+    The fork providing the ternary PQ2_0 (ggml type id 142) kernels, and the ternary
+    model weights this recipe serves.
+    https://github.com/PrismML-Eng/llama.cpp        License: MIT
+    https://huggingface.co/prism-ml/Ternary-Bonsai-2-27B-gguf   License: Apache-2.0
+
+  The adapter file is downloaded from the OrcaBonsai repository at image-build time and
+  verified against the sha256 published by that project:
+    f1669534803d340a496015f5c45125f3437b4d13ec764f40e34488ce83967f42
+
+  The llama.cpp server is compiled from a pinned tag of the PrismML fork during the
+  image build; no binaries are redistributed by this repository.
+
+Model weights are supplied by the user from the upstream public model repository. Users
+are responsible for complying with the upstream licences and with applicable law for the
+content they generate.

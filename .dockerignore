@@ -1,0 +1,7 @@
+.git
+.env
+models
+*.gguf
+*.log
+.DS_Store
+README.md

@@ -1,0 +1,87 @@
+# OrcaBonsai Ternary Bonsai 2 27B Uncensored — OpenAI-compatible server with the
+# runtime refusal-direction ablation applied.
+#
+# The model weights are NOT part of this image. Put the GGUF in ./models (default)
+# or point MODEL_DIR at wherever it lives.
+#
+# Build the images first (see README, or `make`):
+#   docker build -f base/Dockerfile -t prismml-llama-server:cuda13 base/
+#   docker build -t orcabonsai-27b-serving:latest .
+# then:
+#   docker compose up -d
+
+services:
+  orcabonsai:
+    build:
+      context: .
+      args:
+        BASE_IMAGE: ${BASE_IMAGE:-prismml-llama-server:cuda13}
+        ORCABONSAI_REF: ${ORCABONSAI_REF:-main}
+    image: ${SERVICE_IMAGE:-orcabonsai-27b-serving:latest}
+    container_name: orcabonsai-27b
+    # Requires Docker 27+ / Compose v2.30+. On older setups, comment this out and use
+    # the deploy.resources block at the bottom of this service instead.
+    gpus: all
+    volumes:
+      - ${MODEL_DIR:-./models}:/models:ro
+    ports:
+      - "${PORT:-8080}:8080"
+    command:
+      - "-m"
+      - "/models/${MODEL_FILE:-Ternary-Bonsai-2-27B-PQ2_0.gguf}"
+      # The ablation, applied at inference time. :1.0 IS the exact projection
+      # (llama.cpp computes scale = adapter_scale * alpha / rank, and this adapter is
+      # alpha 1.0 rank 1). 0 = published behaviour, 2 = flips stubborn refusals.
+      - "--lora-scaled"
+      - "/app/gguf/bonsai-abliterate-lora.gguf:${BONSAI_ALPHA:-1.0}"
+      - "--host"
+      - "0.0.0.0"
+      - "--port"
+      - "8080"
+      - "--n-gpu-layers"
+      - "99"
+      # Spread the model across all visible GPUs. Set BONSAI_SPLIT to weights, e.g.
+      # "70,30" for a lopsided pair, or lower --n-gpu-layers if a card is smaller.
+      - "--tensor-split"
+      - "${BONSAI_SPLIT:-50,50}"
+      - "--flash-attn"
+      - "on"
+      - "--ctx-size"
+      - "${BONSAI_CTX:-262144}"
+      - "--cache-type-k"
+      - "${BONSAI_KV_TYPE:-q8_0}"
+      - "--cache-type-v"
+      - "${BONSAI_KV_TYPE:-q8_0}"
+      - "--batch-size"
+      - "2048"
+      - "--ubatch-size"
+      - "1024"
+      - "--parallel"
+      - "1"
+      - "--jinja"
+      - "--temp"
+      - "1.0"
+      - "--top-p"
+      - "0.95"
+      - "--top-k"
+      - "20"
+      - "--min-p"
+      - "0.0"
+      - "--repeat-penalty"
+      - "1.0"
+      - "--metrics"
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://127.0.0.1:8080/health >/dev/null || exit 1"]
+      interval: 20s
+      timeout: 5s
+      retries: 30
+      start_period: 180s
+    restart: unless-stopped
+    # Older Docker without `gpus:` support — use this instead of the gpus key:
+    # deploy:
+    #   resources:
+    #     reservations:
+    #       devices:
+    #         - driver: nvidia
+    #           count: all
+    #           capabilities: [gpu]

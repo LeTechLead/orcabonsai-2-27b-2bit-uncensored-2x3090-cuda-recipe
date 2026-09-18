@@ -1,0 +1,10 @@
+# Model weights are supplied by the user; never commit them.
+models/
+*.gguf
+
+# Local configuration
+.env
+
+# Misc
+.DS_Store
+*.log
