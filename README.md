@@ -47,6 +47,17 @@ this is handled for you.
 - Patience for the first build: a CUDA llama.cpp compile takes roughly 15–40 minutes
   depending on core count and how many GPU architectures you target
 
+The toolkit the server is compiled against defaults to **CUDA 13.1.1**, which wants a 580-series
+driver or newer. On an older driver, build against an earlier toolkit instead:
+
+```bash
+make base CUDA_VERSION=12.8.0     # 570+ driver
+make base CUDA_VERSION=12.4.0     # 550+ driver
+```
+
+Match `CUDA_VERSION` to what your driver supports — the runtime image is pulled from the same
+tag, so the two never disagree.
+
 ## Quickstart
 
 **1. Get the model** (~6.7 GiB, not redistributed here):
@@ -133,6 +144,38 @@ that `/lora-adapters` shows `scale` matching `BONSAI_ALPHA`.
 Rough VRAM: ~6.5 GiB of weights plus KV. At `q8_0`, the KV costs about 34 KiB/token, so
 262144 context adds ~8.5 GiB — it fits comfortably on a single 24 GB card, and splitting
 across two gets you faster decode because the model is bandwidth-bound.
+
+## Measured performance
+
+Reference build: fork tag `prism-b10685-7dffb15` compiled with `CUDA_ARCHS=86`, on 2× RTX 3090
+(24 GiB each), `--tensor-split 50/50`, `--ctx-size 262144`, q8_0 KV, adapter at alpha 1.0.
+Steady state used ~11.4 / 11.6 GiB of VRAM per card, with no CPU offload.
+
+Measured with **llama-benchy** (pp 4096 / tg 512, 3 runs, averages, `--no-cache` so every run is a
+real prefill). "Depth" is tokens of conversation history already in context:
+
+| depth | prefill t/s | decode t/s | TTFT | E2E, 512 tokens |
+|---:|---:|---:|---:|---:|
+| 8,192 | 1,278 | 62.7 | 9.6 s | 17.8 s |
+| 32,768 | 1,162 | 52.6 | 31.7 s | 41.5 s |
+| 65,536 | 1,018 | 42.8 | 68.4 s | 80.4 s |
+| 122,880 | 834 | 31.8 | 152.2 s | 168.3 s |
+| 150,000 | 767 | 28.5 | 200.8 s | 218.8 s |
+| 257,000 | 555 | 20.0 | 474.4 s | 500.0 s |
+
+TTFT is time to the first token; E2E is prefill through the last of 512 generated tokens
+(TTFT + 512/decode).
+
+- **Prefill degrades gently**: 1,278 → 555 t/s across the entire 257k ladder, so the full native
+  window is usable, not just loadable.
+- **Decode is memory-bandwidth bound and falls as the context fills**: 62.7 → 20.0 t/s. That is
+  the real cost of a deep context. Short-prompt benchmarks report much higher decode numbers and
+  are misleading for anything you intend to run at depth.
+- The 257k prefill row carries a wider spread (±50 t/s) because one of its three runs overlapped an
+  unrelated request on the same endpoint; the server itself logged a steady ~593 t/s across all
+  three runs. Treat ~590 as the cleaner figure.
+- Throughput roughly halves when a second model shares the GPUs (55 tok/s decode observed
+  co-resident with another 24 GiB-class server).
 
 ## Files
 
