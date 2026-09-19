@@ -160,19 +160,18 @@ that `/lora-adapters` shows `scale` matching `BONSAI_ALPHA`.
 | `BONSAI_ALPHA` | `1.0` | Ablation strength. `0` = published model, `1` = exact projection, `2` = flips stubborn refusals at some coherence cost. Runtime dial, no second checkpoint |
 | `BONSAI_CTX` | `262144` | Trained context; llama.cpp clamps anything above it |
 | `BONSAI_KV_TYPE` | `q8_0` | `q4_0` roughly halves KV memory at some quality cost |
+| `BONSAI_SPLIT` | `50,50` | Fraction of the model per GPU, one entry per GPU |
 | `--n-gpu-layers` | `99` | Lower it to keep some layers on CPU if a card is too small |
 
 Rough VRAM: ~6.5 GiB of weights plus KV. At `q8_0`, the KV costs about 34 KiB/token, so
-262144 context adds ~8.5 GiB — it fits comfortably on a single 24 GB card. More cards need
-no configuration: the command passes no `--tensor-split`, so llama.cpp shards the model
-across every GPU it can see, and decode gets faster because the model is bandwidth-bound.
+262144 context adds ~8.5 GiB — it fits comfortably on a single 24 GB card, and splitting
+across two gets you faster decode because the model is bandwidth-bound.
 
 ## Measured performance
 
-Reference build: fork tag `prism-b10685-7dffb15` compiled with `CUDA_ARCHS=86`, measured on
-2× RTX 3090 (24 GiB each) — the measurement rig, not a requirement; the command itself is
-GPU-count agnostic. `--ctx-size 262144`, q8_0 KV, adapter at alpha 1.0, and no `--tensor-split`
-(llama.cpp's own even shard). Steady state used ~11.4 / 11.6 GiB of VRAM per card, no CPU offload.
+Reference build: fork tag `prism-b10685-7dffb15` compiled with `CUDA_ARCHS=86`, on 2× RTX 3090
+(24 GiB each), `--tensor-split 50/50`, `--ctx-size 262144`, q8_0 KV, adapter at alpha 1.0.
+Steady state used ~11.4 / 11.6 GiB of VRAM per card, with no CPU offload.
 
 Measured with **llama-benchy** (pp 4096 / tg 512, 3 runs, averages, `--no-cache` so every run is a
 real prefill). "Depth" is tokens of conversation history already in context:
