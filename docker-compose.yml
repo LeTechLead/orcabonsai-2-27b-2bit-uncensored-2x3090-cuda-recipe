@@ -38,10 +38,10 @@ services:
       - "8080"
       - "--n-gpu-layers"
       - "99"
-      # Spread the model across all visible GPUs. Set BONSAI_SPLIT to weights, e.g.
-      # "70,30" for a lopsided pair, or lower --n-gpu-layers if a card is smaller.
-      - "--tensor-split"
-      - "${BONSAI_SPLIT:-50,50}"
+      # No --tensor-split here on purpose: llama.cpp spreads the model across every
+      # visible GPU by itself, so this runs on one card or on several with no edit.
+      # Add an explicit --tensor-split only for lopsided cards (e.g. "70,30" to match
+      # a 24 GB + 12 GB pair), and lower --n-gpu-layers if a card cannot hold its share.
       - "--flash-attn"
       - "on"
       - "--ctx-size"
